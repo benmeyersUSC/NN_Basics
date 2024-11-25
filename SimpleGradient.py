@@ -78,7 +78,7 @@ class SimpleGradient:
 
     def _plot_gd(self, lr):
         fig = plt.figure(figsize=(16, 12))  # Slightly taller to accommodate the bar chart
-        gs = GridSpec(3, 2, width_ratios=[1, 2], height_ratios=[0.5, 1, 1], figure=fig)
+        gs = GridSpec(3, 2, width_ratios=[2, 3], height_ratios=[0.5, 1, 1], figure=fig)
 
         # Use a color palette that matches the outputs over time graph
         colors = plt.cm.tab10(np.linspace(0, 1, self.Y.size))
@@ -94,21 +94,6 @@ class SimpleGradient:
             alpha=0.7
         )
 
-        # Add value labels on top of each bar
-        # for idx, bar in enumerate(bars):
-        #     height = bar.get_height()
-        #     ax_target.text(
-        #         bar.get_x() + bar.get_width() / 2.,
-        #         height,
-        #         f'{height:.2f}',
-        #         ha='center',
-        #         va='bottom',
-        #         fontsize=9,
-        #         fontweight='bold',
-        #         color='gray',
-        #         rotation=0,  # Optional: slight rotation can improve readability
-        #         bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=2)
-        #     )
         for idx, bar in enumerate(bars):
             height = bar.get_height()
             ax_target.text(
@@ -159,7 +144,6 @@ class SimpleGradient:
             handles=legend_elements,
             loc="upper left",
             fontsize="x-small",
-            ncol=2,
             title="Final Outputs"
         )
 
@@ -214,7 +198,7 @@ class SimpleGradient:
 
         plt.tight_layout()
         # plt.show()
-        plt.savefig("nn_visualization.png")
+        plt.savefig("exampleVisualization.png")
 
 if __name__ == "__main__":
     sg = SimpleGradient()
