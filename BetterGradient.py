@@ -15,13 +15,6 @@ cyan_print = lambda x: f"\033[30;46m{x}\033[0m"
 
 
 def softmax(Z):
-    """
-    Applies the softmax function to convert raw scores to probabilities.
-    softmax(x_i) = exp(x_i) / sum(exp(x_j)) for all j
-
-    :param Z: 2D array of shape (batch_size, num_classes)
-    :return: 2D array of same shape with softmax applied row-wise
-    """
     # Subtract max for numerical stability (prevents overflow)
     Z = Z - np.max(Z, axis=1, keepdims=True)
     expZ = np.exp(Z)
@@ -29,273 +22,306 @@ def softmax(Z):
 
 
 def ReLU(Z):
-    """
-    Applies the Rectified Linear Unit (ReLU) activation function.
-    ReLU(x) = max(0, x)
-
-    :param Z: Input array
-    :return: Array with ReLU applied element-wise
-    """
     return np.maximum(0, Z)
 
 
 def deriv_ReLU(Z):
-    """
-    Computes the derivative of the ReLU function.
-    The derivative is 1 for x > 0, and 0 for x <= 0.
-
-    :param Z: Input array
-    :return: Array with derivative of ReLU applied element-wise
-    """
     return Z > 0  # Returns a boolean array, which is implicitly converted to 0s and 1s
 
 
-class SimpleGradient:
-    def __init__(self, x_size=8, y_size=4):
+class BetterGradient:
+    def __init__(self, x_size=16, y_size=10):
+
         self.X = np.random.uniform(-100, 100, size=x_size)
         self.X = (self.X - self.X.mean()) / self.X.std()
 
         self.W1 = np.random.randn(y_size, x_size) * 0.01  # Random small weights
-        self.A1 = np.maximum(self.W1 @ self.X, 0)  # ReLU
+        self.A1 = None
 
         self.W2 = np.random.randn(y_size, y_size) * 0.01  # Square matrix
-        self.A2 = self.W2 @ self.A1
+        self.Z2 = None
 
-        self.Y = softmax(self.A2.reshape(1, -1))
+        self.Y = np.zeros(y_size)
 
         self.target = np.zeros(self.Y.size)
         self.target[random.randint(0, len(self.target) - 1)] = 1
 
-        self.loss = np.sum((self.Y - self.target) ** 2)
+        self.loss = None
+        self.forward_pass()
+        self.calculate_loss()
 
-        """
-                    we want dLoss/dW2 & dLoss/dW1
+        self.losses = self.weight1_trajectories = self.weight2_trajectories = self.output_trajectories = None
 
-                    dLoss/dW2 = dLoss/dA2 * dA2/dW2
-
-                    dLoss/dW1 = dLoss/dA2 * dA2/dW2 * dW2/dA1 * dA1/dW1 
-
-        """
 
         print(
             f"\n\nINITIALIZATION:"
             f"\n************************************************************************************\n"
             f"{blue_print("X")}: {pd.DataFrame(self.X).T}, "
             f"\n{orange_print("W1")}: {pd.DataFrame(self.W1)}, "
-            f"\n{cyan_print("A1")}: {pd.DataFrame(self.A1)}, "
             f"\n{magenta_print("W2")}: {pd.DataFrame(self.W2)}, "
-            f"\n{cyan_print("A2")}: {pd.DataFrame(self.A2)}, "
-            f"\n{yellow_print("Output")}: {pd.DataFrame(self.Y).T}, "
-            f"\n{green_print("Target")}: {pd.DataFrame(self.target)}, "
-            f"\n{red_print("Loss")}: {self.loss}"
+            f"\n\n{green_print("Target")}: {pd.DataFrame(self.target)}, "
             f"\n************************************************************************************")
 
         self.losses = self.weight1_trajectories = self.weight2_trajectories = self.output_trajectories = None
 
-    def gradient_descent(self, iterations=100, learning_rate=0.001, plot=True):
+    def forward_pass(self):
+        self.A1 = np.maximum(self.W1 @ self.X, 0)  # ReLU
+        self.Z2 = self.W2 @ self.A1
+        self.Y = softmax(self.Z2.reshape(1, -1))
+
+    def calculate_loss(self):
+        self.loss = -np.sum(self.target * np.log(self.Y + 1e-12))  # Add epsilon for numerical stability
+
+    def gradient_descent(self, iterations=500, learning_rate=0.01, plot=True):
         self.losses = [self.loss]
         self.weight1_trajectories = np.zeros((self.W1.shape[0], self.W1.shape[1], iterations))
-        self.weight1_trajectories = np.zeros((self.W2.shape[0], self.W2.shape[1], iterations))
+        self.weight2_trajectories = np.zeros((self.W2.shape[0], self.W2.shape[1], iterations))
         self.output_trajectories = np.zeros((self.Y.size, iterations))
 
         self.weight1_trajectories[:, :, 0] = self.W1
         self.weight2_trajectories[:, :, 0] = self.W2
         self.output_trajectories[:, 0] = self.Y
 
-        for iteration in range(1, iterations):
+        for i in range(1, iterations):
+            self.forward_pass()
+            self.calculate_loss()
+
+            # Gradients for cross-entropy loss
+            dL_dY = (self.Y - self.target).reshape(-1)
             """
-            we want dLoss/dW2 & dLoss/dW1
-
-            dLoss/dW2 = dLoss/dA2 * dA2/dW2
-
-            dLoss/dW1 = dLoss/dA2 * dA2/dW2 * dW2/dA1 * dA1/dW1 
-
-
-
-
-
-                    # Backpropagation
-dLoss_dA2 = 2 * (Y - target)  # Loss derivative w.r.t. A2
-dA2_dW2 = A1                  # Gradient of A2 w.r.t. W2
-
-dLoss_dW2 = dLoss_dA2.T @ dA2_dW2.reshape(1, -1)
-
-dA2_dA1 = W2.T
-dA1_dW1 = relu_derivative(A1)[:, np.newaxis] * X[np.newaxis, :]  # Chain rule with ReLU
-
-dLoss_dW1 = (dLoss_dA2 @ dA2_dA1) * dA1_dW1
+            see SoftMaxDerivative.py
             """
 
-            dLoss_dA2 = 2 * (self.Y - self.target)  # Loss derivative w.r.t. A2
-            dA2_dW2 = self.A1  # Gradient of A2 w.r.t. W2
+            # Backpropagation through W2
+            dL_dW2 = np.outer(dL_dY, self.A1)
+            """
+            dZ2/dW2 = A1 (input to this layer)
+            
+            so this is dL_dW2 = dL_dY * dZ2_dW2 = dL_dY * A1
+            """
 
-            # Gradient computation
-            dloss_dY = 2 * (self.Y - self.target)  # Gradient wrt outputs
+            # Backpropagation through ReLU and W1
+            dZ2_dA1 = self.W2.T  # Gradient from second layer weights
+            """
+            Z2 = W2 @ A1, hence dZ2/dA1 = W2 (transpose is to fit with necessary matmul)
+            """
 
-            dloss_dW1 = np.outer(dloss_dY, self.X)  # Gradient wrt weights
-            if iteration % 25 == 0:
-                print(
-                    f"\n\n------------------------------------------------------------------------------------------------")
-                print(f"Iteration {iteration}:")
-                print(
-                    f"{blue_print("X")}: {pd.DataFrame(self.X).T}, "
-                    f"\n{yellow_print("Output")}: {pd.DataFrame(self.Y).T}, "
-                    f"\n{green_print("Target")}: {pd.DataFrame(self.target).T}, "
-                    f"\n{red_print("Loss")}: {self.loss}")
-                print(
-                    f"\n\t{cyan_print("Gradient wrt Outputs")}: (d-{red_print("Loss")} / d-{yellow_print("Output")}): \n\n\t\t{pd.DataFrame(dloss_dY).T}"
-                    f"\n\n\tFormula: (2 * ({yellow_print("Output")} - {green_print("Target")}))")
-                print(
-                    f"\n\n\t{magenta_print("Gradient wrt Weights")}: (d-({cyan_print("Gradient wrt Outputs")}) / d-{blue_print("X")}): \n{pd.DataFrame(dloss_dW1)}"
-                    f"\n\n\tFormula: (OuterProduct ({cyan_print("Gradient wrt Outputs")}) x {blue_print("X")})")
-                print(f"Now we just subtract this ^^^ matrix (* learning_rate={learning_rate}) from our previous W1")
-                print(
-                    f"------------------------------------------------------------------------------------------------")
+            dA1_dZ1 = (self.A1 > 0).astype(float)  # ReLU derivative
+            """
+            A1 = ReLU(Z1) and ReLU(x) = max(0, x), hence dA1/dZ1 = ReLU'(Z1), which is a boolean vector of scalars (1)
+            """
 
-            # Update weights
-            self.W1 -= learning_rate * dloss_dW1
-            self.weight1_trajectories[:, :, iteration] = self.W1  # Store updated weights
+            dL_dA1 = dZ2_dA1 @ dL_dY
+            """
+            dA1 affects dZ2/dA1 (W2), which then goes through loss gradient, dL/dY
+            """
 
-            self.W2 -= learning_rate * dloss_dW2
-            self.weight2_trajectories[:, :, iteration] = self.W2  # Store updated weights
+            dL_dZ1 = dL_dA1 * dA1_dZ1
+            """
+            * because same dimension (now using the boolean vector to turn on/off multiplications)
+            dL/dZ1 is just dL/dA1 when Z1 is positive
+            """
 
-            # Recompute predictions and loss
-            self.A1 = np.maximum(self.W1 @ self.X, 0)  # ReLU
-            self.A2 = self.W2 @ self.A1
-            self.Y = softmax(self.A2.reshape(1, -1))
+            dL_dW1 = np.outer(dL_dZ1, self.X)  # dZ1/dW1 = X (input to first layer)
+            """
+            dL/dZ1 encompasses all that comes after Z1, so we look to ahead of W1
+            Z1 = W1 @ X, hence dL/dW1 includes X as a term which affects dL/dZ1 
+            """
 
-            self.output_trajectories[:, iteration] = self.Y  # Store updated outputs
-            self.loss = sum((self.Y - self.target) ** 2)
+            self.W1 -= learning_rate * dL_dW1
+            self.W2 -= learning_rate * dL_dW2
+
+            self.weight1_trajectories[:, :, i] = self.W1
+            self.weight2_trajectories[:, :, i] = self.W2
+
+            self.output_trajectories[:, i] = self.Y
             self.losses.append(self.loss)
+
 
         if plot:
             self._plot_gd(learning_rate)
 
+
+
+    # def _plot_gd(self, lr):
+    #     plt.style.use('seaborn')
+    #     fig = plt.figure(figsize=(20, 15), facecolor='#f0f0f0')
+    #     gs = GridSpec(3, 2, height_ratios=[2, 2, 1])
+    #
+    #     # Color palette
+    #     colors = plt.cm.cool(np.linspace(0, 1, max(self.W1.shape[1], self.W2.shape[1])))
+    #
+    #     # W1 Weights Trajectory - Large Subplot
+    #     ax_weights1 = fig.add_subplot(gs[0, 0])
+    #     ax_weights1.set_title('W1 Weights Trajectory', fontsize=16, fontweight='bold')
+    #     for i in range(self.W1.shape[1]):
+    #         for j in range(self.W1.shape[0]):
+    #             ax_weights1.plot(
+    #                 self.weight1_trajectories[j, i, :],
+    #                 color=colors[i],
+    #                 alpha=0.7,
+    #                 linewidth=2,
+    #                 label=f'W1[{j},{i}]'
+    #             )
+    #     ax_weights1.set_xlabel('Iteration', fontsize=12)
+    #     ax_weights1.set_ylabel('Weight Value', fontsize=12)
+    #     ax_weights1.grid(True, linestyle='--', alpha=0.5)
+    #
+    #     # W2 Weights Trajectory - Large Subplot
+    #     ax_weights2 = fig.add_subplot(gs[0, 1])
+    #     ax_weights2.set_title('W2 Weights Trajectory', fontsize=16, fontweight='bold')
+    #     for i in range(self.W2.shape[1]):
+    #         for j in range(self.W2.shape[0]):
+    #             ax_weights2.plot(
+    #                 self.weight2_trajectories[j, i, :],
+    #                 color=colors[i],
+    #                 alpha=0.7,
+    #                 linewidth=2,
+    #                 label=f'W2[{j},{i}]'
+    #             )
+    #     ax_weights2.set_xlabel('Iteration', fontsize=12)
+    #     ax_weights2.set_ylabel('Weight Value', fontsize=12)
+    #     ax_weights2.grid(True, linestyle='--', alpha=0.5)
+    #
+    #     # Output Trajectory
+    #     ax_outputs = fig.add_subplot(gs[1, 0])
+    #     ax_outputs.set_title('Outputs over Iterations', fontsize=16, fontweight='bold')
+    #     for i in range(self.Y.size):
+    #         outputs = self.output_trajectories[i, :]
+    #         ax_outputs.plot(
+    #             outputs,
+    #             color=plt.cm.viridis(i / self.Y.size),
+    #             linewidth=2,
+    #             label=f'Output [{i}]'
+    #         )
+    #     ax_outputs.set_xlabel('Iteration', fontsize=12)
+    #     ax_outputs.set_ylabel('Output Value', fontsize=12)
+    #     ax_outputs.grid(True, linestyle='--', alpha=0.5)
+    #     ax_outputs.legend(loc='best', fontsize=10)
+    #
+    #     # Loss Trajectory
+    #     ax_loss = fig.add_subplot(gs[1, 1])
+    #     ax_loss.set_title(f'Loss over Iterations (lr = {lr})', fontsize=16, fontweight='bold')
+    #     ax_loss.plot(
+    #         self.losses,
+    #         color='crimson',
+    #         linewidth=3,
+    #         label='Loss'
+    #     )
+    #     ax_loss.set_xlabel('Iteration', fontsize=12)
+    #     ax_loss.set_ylabel('Loss Value', fontsize=12)
+    #     ax_loss.grid(True, linestyle='--', alpha=0.5)
+    #
+    #     # Target Distribution
+    #     ax_target = fig.add_subplot(gs[2, :])
+    #     ax_target.set_title('Target Distribution', fontsize=16, fontweight='bold')
+    #     ax_target.imshow(
+    #         np.expand_dims(self.target, axis=0),
+    #         cmap='coolwarm',
+    #         aspect='auto',
+    #         interpolation='nearest'
+    #     )
+    #     ax_target.set_xlabel('Output Index', fontsize=12)
+    #     ax_target.set_xticks(range(len(self.target)))
+    #     ax_target.set_xticklabels([f'[{i}]' for i in range(len(self.target))])
+    #     ax_target.set_yticks([])
+    #
+    #     # Final layout adjustments
+    #     plt.tight_layout()
+    #     fig.subplots_adjust(hspace=0.3, wspace=0.3)
+    #     plt.suptitle('Gradient Descent Visualization', fontsize=20, fontweight='bold', y=1.02)
+    #     plt.savefig("ImpressiveGradientPlot.png", dpi=300, bbox_inches='tight')
+
     def _plot_gd(self, lr):
-        fig = plt.figure(figsize=(16, 12))  # Slightly taller to accommodate the bar chart
-        gs = GridSpec(3, 2, width_ratios=[2, 3], height_ratios=[0.5, 1, 1], figure=fig)
+        plt.style.use('ggplot')  # A built-in matplotlib style
+        fig = plt.figure(figsize=(20, 15), facecolor='#f0f0f0')
+        gs = GridSpec(3, 2, height_ratios=[2, 2, 1])
 
-        # Use a color palette that matches the outputs over time graph
-        colors = plt.cm.tab10(np.linspace(0, 1, self.Y.size))
+        # Color palette
+        colors = plt.cm.cool(np.linspace(0, 1, max(self.W1.shape[1], self.W2.shape[1])))
 
-        # Target Output Bar Chart (new top subplot)
-        ax_target = fig.add_subplot(gs[0, :])
+        # W1 Weights Trajectory - Large Subplot
+        ax_weights1 = fig.add_subplot(gs[0, 0])
+        ax_weights1.set_title('W1 Weights Trajectory', fontsize=16, fontweight='bold')
+        for i in range(self.W1.shape[1]):
+            for j in range(self.W1.shape[0]):
+                ax_weights1.plot(
+                    self.weight1_trajectories[j, i, :],
+                    color=colors[i],
+                    alpha=0.7,
+                    linewidth=2,
+                    label=f'W1[{j},{i}]'
+                )
+        ax_weights1.set_xlabel('Iteration', fontsize=12)
+        ax_weights1.set_ylabel('Weight Value', fontsize=12)
+        ax_weights1.grid(True, linestyle='--', alpha=0.5)
 
-        # Create bar plot with value labels
-        bars = ax_target.bar(
-            range(len(self.target)),
-            self.target,
-            color=colors,
-            alpha=0.7
-        )
+        # W2 Weights Trajectory - Large Subplot
+        ax_weights2 = fig.add_subplot(gs[0, 1])
+        ax_weights2.set_title('W2 Weights Trajectory', fontsize=16, fontweight='bold')
+        for i in range(self.W2.shape[1]):
+            for j in range(self.W2.shape[0]):
+                ax_weights2.plot(
+                    self.weight2_trajectories[j, i, :],
+                    color=colors[i],
+                    alpha=0.7,
+                    linewidth=2,
+                    label=f'W2[{j},{i}]'
+                )
+        ax_weights2.set_xlabel('Iteration', fontsize=12)
+        ax_weights2.set_ylabel('Weight Value', fontsize=12)
+        ax_weights2.grid(True, linestyle='--', alpha=0.5)
 
-        for idx, bar in enumerate(bars):
-            height = bar.get_height()
-            ax_target.text(
-                bar.get_x() + bar.get_width() / 2.,
-                0,  # Position at x-axis instead of bar top
-                f'{height:.2f}',
-                ha='center',
-                va='bottom',
-                fontsize=9,
-                fontweight='bold',
-                color='gray',
-                rotation=0,
-                bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=2)
-            )
-
-        ax_target.set_title("Target Outputs")
-        ax_target.set_xlabel("Output Index")
-        ax_target.set_ylabel("Target Value")
-        ax_target.set_xticks(range(len(self.target)))
-        ax_target.set_xticklabels([f'[{i}]' for i in range(len(self.target))])
-
-        # Outputs plot
+        # Output Trajectory
         ax_outputs = fig.add_subplot(gs[1, 0])
-        final_outputs = []
+        ax_outputs.set_title('Outputs over Iterations', fontsize=16, fontweight='bold')
         for i in range(self.Y.size):
             outputs = self.output_trajectories[i, :]
-            final_outputs.append(outputs[-1])
             ax_outputs.plot(
                 outputs,
-                label=f"[{i}]",
-                color=colors[i]
+                color=plt.cm.viridis(i / self.Y.size),
+                linewidth=2,
+                label=f'Output [{i}]'
             )
-            ax_outputs.scatter(
-                len(outputs) - 1,
-                outputs[-1],
-                color=colors[i],
-                s=100,
-                edgecolor="black",
-                zorder=5
-            )
+        ax_outputs.set_xlabel('Iteration', fontsize=12)
+        ax_outputs.set_ylabel('Output Value', fontsize=12)
+        ax_outputs.grid(True, linestyle='--', alpha=0.5)
+        ax_outputs.legend(loc='best', fontsize=10)
 
-        legend_elements = [
-            plt.Line2D([0], [0], color=colors[i], marker='o', linestyle='-',
-                       markersize=6, label=f'[{i}]: {val:.2f}')
-            for i, val in enumerate(final_outputs)
-        ]
-        ax_outputs.legend(
-            handles=legend_elements,
-            loc="upper left",
-            fontsize="x-small",
-            title="Final Outputs"
+        # Loss Trajectory
+        ax_loss = fig.add_subplot(gs[1, 1])
+        ax_loss.set_title(f'Loss over Iterations (lr = {lr})', fontsize=16, fontweight='bold')
+        ax_loss.plot(
+            self.losses,
+            color='crimson',
+            linewidth=3,
+            label='Loss'
         )
+        ax_loss.set_xlabel('Iteration', fontsize=12)
+        ax_loss.set_ylabel('Loss Value', fontsize=12)
+        ax_loss.grid(True, linestyle='--', alpha=0.5)
 
-        ax_outputs.set_title("Outputs over Iterations")
-        ax_outputs.set_xlabel("Iteration")
-        ax_outputs.set_ylabel("Output Value")
-
-        # Loss plot
-        ax_loss = fig.add_subplot(gs[2, 0])
-        ax_loss.plot(self.losses, label=f"Loss over time (lr = {lr})", color="red")
-        ax_loss.scatter(len(self.losses) - 1, self.losses[-1], color="red", s=100, edgecolor="black", zorder=5)
-        ax_loss.legend(loc="upper right", fontsize="large")
-        ax_loss.set_title("Loss over Iterations")
-        ax_loss.set_xlabel("Iteration")
-        ax_loss.set_ylabel("Loss")
-
-        # Weights plot
-        ax_weights = fig.add_subplot(gs[1:, 1])
-
-        # Plot all weights first
-        for i in range(self.W1.shape[1]):  # rows (output dimension)
-            for j in range(self.W1.shape[0]):  # columns (input dimension)
-                ax_weights.plot(
-                    self.weight_trajectories[j, i, :],
-                    label=f"[{j},{i}]"
-                )
-                ax_weights.scatter(
-                    len(self.weight_trajectories[j, i, :]) - 1,
-                    self.weight_trajectories[j, i, -1],
-                    s=100,
-                    edgecolor="black",
-                    zorder=5
-                )
-
-        # Create legend with exact matrix dimensions
-        handles, labels = ax_weights.get_legend_handles_labels()
-        ax_weights.legend(
-            handles,
-            labels,
-            loc='lower left',
-            fontsize='x-small',
-            ncol=self.W1.shape[1],
-            labelspacing=0.1,
-            columnspacing=0.5,
-            handlelength=1,
-            handletextpad=0.3
+        # Target Distribution
+        ax_target = fig.add_subplot(gs[2, :])
+        ax_target.set_title('Target Distribution', fontsize=16, fontweight='bold')
+        ax_target.imshow(
+            np.expand_dims(self.target, axis=0),
+            cmap='coolwarm',
+            aspect='auto',
+            interpolation='nearest'
         )
+        ax_target.set_xlabel('Output Index', fontsize=12)
+        ax_target.set_xticks(range(len(self.target)))
+        ax_target.set_xticklabels([f'[{i}]' for i in range(len(self.target))])
+        ax_target.set_yticks([])
 
-        ax_weights.set_title("Weights over Iterations")
-        ax_weights.set_xlabel("Iteration")
-        ax_weights.set_ylabel("Weight Value")
-
+        # Final layout adjustments
         plt.tight_layout()
-        # plt.show()
-        plt.savefig("nn_viz.png")
-
-
+        fig.subplots_adjust(hspace=0.3, wspace=0.3)
+        plt.suptitle('Gradient Descent Visualization', fontsize=20, fontweight='bold', y=1.02)
+        plt.savefig("BetterGradientPlot.png", dpi=300, bbox_inches='tight')
 if __name__ == "__main__":
-    sg = SimpleGradient()
-    # sg.gradient_descent()
+    bg = BetterGradient()
+    bg.gradient_descent()
+
+

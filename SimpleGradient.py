@@ -198,7 +198,7 @@ class SimpleGradient:
 
         plt.tight_layout()
         # plt.show()
-        plt.savefig("nn_viz.png")
+        plt.savefig("SimpleGradientPlot.png")
 
 if __name__ == "__main__":
     sg = SimpleGradient()
