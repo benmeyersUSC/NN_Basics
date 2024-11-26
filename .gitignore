@@ -1,5 +1,5 @@
 *.png
 !SimpleGradientExample.png
 !BetterGradientExample.png
-!SimpleGradientNotes.png
-!BetterGradientNotes.png
+!notes/*.png
+*.csv

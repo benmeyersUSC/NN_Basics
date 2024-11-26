@@ -1,10 +1,9 @@
 import random
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-
+import fake_data as fkd
 green_print = lambda x: f"\033[30;42m{x}\033[0m"
 red_print = lambda x: f"\033[30;41m{x}\033[0m"
 orange_print = lambda x: f"\033[1;33;40m{x}\033[0m"
@@ -12,6 +11,7 @@ yellow_print = lambda x: f"\033[30;43m{x}\033[0m"
 blue_print = lambda x: f"\033[30;44m{x}\033[0m"
 magenta_print = lambda x: f"\033[30;45m{x}\033[0m"
 cyan_print = lambda x: f"\033[30;46m{x}\033[0m"
+
 
 
 def softmax(Z):
@@ -36,7 +36,7 @@ class BetterGradient:
         self.X = (self.X - self.X.mean()) / self.X.std()
 
         self.W1 = np.random.randn(y_size, x_size) * 0.01  # Random small weights
-        self.A1 = None
+        self.A1 = np.zeros(y_size)
 
         self.W2 = np.random.randn(y_size, y_size) * 0.01  # Square matrix
         self.Z2 = None
@@ -50,7 +50,7 @@ class BetterGradient:
         self.forward_pass()
         self.calculate_loss()
 
-        self.losses = self.weight1_trajectories = self.weight2_trajectories = self.output_trajectories = None
+        self.losses = self.weight1_trajectories = self.weight2_trajectories = self.a1_trajectories = self.output_trajectories = None
 
 
         print(
@@ -65,24 +65,78 @@ class BetterGradient:
         self.losses = self.weight1_trajectories = self.weight2_trajectories = self.output_trajectories = None
 
     def forward_pass(self):
-        self.A1 = np.maximum(self.W1 @ self.X, 0)  # ReLU
+        x = self.X
+        self.A1 = np.maximum(self.W1 @ x, 0)  # ReLU
         self.Z2 = self.W2 @ self.A1
         self.Y = softmax(self.Z2.reshape(1, -1))
 
     def calculate_loss(self):
         self.loss = -np.sum(self.target * np.log(self.Y + 1e-12))  # Add epsilon for numerical stability
 
-    def gradient_descent(self, iterations=500, learning_rate=0.01, plot=True):
+    def gradient_descent(self, iterations=500, learning_rate=0.001, plot=True, insert_data="", make_data=False):
+        in_data = inX = inY = None
+        data_good = False
+
+        if len(insert_data) > 4:
+            if make_data:
+                # Generate dataset
+                X, y = fkd.generate_complex_dataset(n_samples=5427, noise_level=0.3)
+
+                fkd.export_dataset_to_csv(
+                    # X, y,
+                    *fkd.generate_complex_dataset(n_samples=5427, noise_level=0.3),
+                    filename=insert_data,
+                    feature_prefix='x_',
+                    target_column='label'
+                )
+
+            if ".csv" in insert_data:
+                try:
+                    in_data = pd.read_csv(insert_data)
+                    in_data = in_data.drop_duplicates()
+                    in_data = in_data.dropna()
+                    inX = in_data.drop(columns=["label"])
+                    inY = in_data["label"]
+                    inY_one_hot = np.zeros((len(inY), 10))
+                    inY_one_hot[np.arange(len(inY)), inY.values] = 1
+                    inY = inY_one_hot
+                    data_good = True
+                except:
+                    pass
+        else:
+            if make_data:
+                # Generate dataset
+                # X, y = generate_complex_dataset(n_samples=5427, noise_level=0.3)
+
+                fkd.export_dataset_to_csv(
+                    # X, y,
+                    # X, y,
+                    *fkd.generate_complex_dataset(n_samples=5427, noise_level=0.3),
+                    filename="NN_data.csv",
+                    feature_prefix='x_',
+                    target_column='label'
+                )
+
+
+
         self.losses = [self.loss]
         self.weight1_trajectories = np.zeros((self.W1.shape[0], self.W1.shape[1], iterations))
         self.weight2_trajectories = np.zeros((self.W2.shape[0], self.W2.shape[1], iterations))
+        self.a1_trajectories = np.zeros((self.A1.shape[0], iterations))
         self.output_trajectories = np.zeros((self.Y.size, iterations))
 
         self.weight1_trajectories[:, :, 0] = self.W1
         self.weight2_trajectories[:, :, 0] = self.W2
+        self.a1_trajectories[:, 0] = self.A1
         self.output_trajectories[:, 0] = self.Y
 
         for i in range(1, iterations):
+            if data_good:
+                rNum = np.random.randint(len(in_data))
+                self.X = inX.iloc[rNum].values
+                self.Y = inY[rNum]
+
+
             self.forward_pass()
             self.calculate_loss()
 
@@ -133,6 +187,7 @@ class BetterGradient:
 
             self.weight1_trajectories[:, :, i] = self.W1
             self.weight2_trajectories[:, :, i] = self.W2
+            self.a1_trajectories[:, i] = self.A1
 
             self.output_trajectories[:, i] = self.Y
             self.losses.append(self.loss)
@@ -141,96 +196,6 @@ class BetterGradient:
         if plot:
             self._plot_gd(learning_rate)
 
-
-
-    # def _plot_gd(self, lr):
-    #     plt.style.use('seaborn')
-    #     fig = plt.figure(figsize=(20, 15), facecolor='#f0f0f0')
-    #     gs = GridSpec(3, 2, height_ratios=[2, 2, 1])
-    #
-    #     # Color palette
-    #     colors = plt.cm.cool(np.linspace(0, 1, max(self.W1.shape[1], self.W2.shape[1])))
-    #
-    #     # W1 Weights Trajectory - Large Subplot
-    #     ax_weights1 = fig.add_subplot(gs[0, 0])
-    #     ax_weights1.set_title('W1 Weights Trajectory', fontsize=16, fontweight='bold')
-    #     for i in range(self.W1.shape[1]):
-    #         for j in range(self.W1.shape[0]):
-    #             ax_weights1.plot(
-    #                 self.weight1_trajectories[j, i, :],
-    #                 color=colors[i],
-    #                 alpha=0.7,
-    #                 linewidth=2,
-    #                 label=f'W1[{j},{i}]'
-    #             )
-    #     ax_weights1.set_xlabel('Iteration', fontsize=12)
-    #     ax_weights1.set_ylabel('Weight Value', fontsize=12)
-    #     ax_weights1.grid(True, linestyle='--', alpha=0.5)
-    #
-    #     # W2 Weights Trajectory - Large Subplot
-    #     ax_weights2 = fig.add_subplot(gs[0, 1])
-    #     ax_weights2.set_title('W2 Weights Trajectory', fontsize=16, fontweight='bold')
-    #     for i in range(self.W2.shape[1]):
-    #         for j in range(self.W2.shape[0]):
-    #             ax_weights2.plot(
-    #                 self.weight2_trajectories[j, i, :],
-    #                 color=colors[i],
-    #                 alpha=0.7,
-    #                 linewidth=2,
-    #                 label=f'W2[{j},{i}]'
-    #             )
-    #     ax_weights2.set_xlabel('Iteration', fontsize=12)
-    #     ax_weights2.set_ylabel('Weight Value', fontsize=12)
-    #     ax_weights2.grid(True, linestyle='--', alpha=0.5)
-    #
-    #     # Output Trajectory
-    #     ax_outputs = fig.add_subplot(gs[1, 0])
-    #     ax_outputs.set_title('Outputs over Iterations', fontsize=16, fontweight='bold')
-    #     for i in range(self.Y.size):
-    #         outputs = self.output_trajectories[i, :]
-    #         ax_outputs.plot(
-    #             outputs,
-    #             color=plt.cm.viridis(i / self.Y.size),
-    #             linewidth=2,
-    #             label=f'Output [{i}]'
-    #         )
-    #     ax_outputs.set_xlabel('Iteration', fontsize=12)
-    #     ax_outputs.set_ylabel('Output Value', fontsize=12)
-    #     ax_outputs.grid(True, linestyle='--', alpha=0.5)
-    #     ax_outputs.legend(loc='best', fontsize=10)
-    #
-    #     # Loss Trajectory
-    #     ax_loss = fig.add_subplot(gs[1, 1])
-    #     ax_loss.set_title(f'Loss over Iterations (lr = {lr})', fontsize=16, fontweight='bold')
-    #     ax_loss.plot(
-    #         self.losses,
-    #         color='crimson',
-    #         linewidth=3,
-    #         label='Loss'
-    #     )
-    #     ax_loss.set_xlabel('Iteration', fontsize=12)
-    #     ax_loss.set_ylabel('Loss Value', fontsize=12)
-    #     ax_loss.grid(True, linestyle='--', alpha=0.5)
-    #
-    #     # Target Distribution
-    #     ax_target = fig.add_subplot(gs[2, :])
-    #     ax_target.set_title('Target Distribution', fontsize=16, fontweight='bold')
-    #     ax_target.imshow(
-    #         np.expand_dims(self.target, axis=0),
-    #         cmap='coolwarm',
-    #         aspect='auto',
-    #         interpolation='nearest'
-    #     )
-    #     ax_target.set_xlabel('Output Index', fontsize=12)
-    #     ax_target.set_xticks(range(len(self.target)))
-    #     ax_target.set_xticklabels([f'[{i}]' for i in range(len(self.target))])
-    #     ax_target.set_yticks([])
-    #
-    #     # Final layout adjustments
-    #     plt.tight_layout()
-    #     fig.subplots_adjust(hspace=0.3, wspace=0.3)
-    #     plt.suptitle('Gradient Descent Visualization', fontsize=20, fontweight='bold', y=1.02)
-    #     plt.savefig("ImpressiveGradientPlot.png", dpi=300, bbox_inches='tight')
 
     def _plot_gd(self, lr):
         plt.style.use('ggplot')  # A built-in matplotlib style
@@ -320,8 +285,11 @@ class BetterGradient:
         fig.subplots_adjust(hspace=0.3, wspace=0.3)
         plt.suptitle('Gradient Descent Visualization', fontsize=20, fontweight='bold', y=1.02)
         plt.savefig("BetterGradientPlot.png", dpi=300, bbox_inches='tight')
+
+
+
 if __name__ == "__main__":
     bg = BetterGradient()
-    bg.gradient_descent()
+    bg.gradient_descent(iterations=2927, insert_data="NN_data.csv")
 
 

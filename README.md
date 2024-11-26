@@ -57,5 +57,8 @@ Finally, below, I have attached two pictures of some of the notes I have been ta
 re-education in the calculus behind backpropagation. In no way is this stuff official or 
 particularly novel in its presentation, but I thought why not share my notes....
 
-![NN_Basics](SimpleGradientNotes.png)
-![NN_Basics](BetterGradientNotes.png)
+![NN_Basics](notes/SimpleGradientNotes.png)
+![NN_Basics](notes/BetterGradientNotes.png)
+![NN_Basics](notes/NN_Derivatives.png)
+![NN_Basics](notes/AttentionMechanism.png)
+![NN_Basics](notes/AttentionTree.png)
