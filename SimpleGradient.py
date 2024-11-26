@@ -55,11 +55,17 @@ class SimpleGradient:
                     f"\n\n------------------------------------------------------------------------------------------------")
                 print(f"Iteration {iteration}:")
                 print(
-                    f"{blue_print("X")}: {pd.DataFrame(self.X).T}, \n{yellow_print("Output")}: {pd.DataFrame(self.Y).T}, \n{green_print("Target")}: {pd.DataFrame(self.target).T}, \n{red_print("Loss")}: {self.loss}")
+                    f"{blue_print("X")}: {pd.DataFrame(self.X).T}, "
+                    f"\n{yellow_print("Output")}: {pd.DataFrame(self.Y).T}, "
+                    f"\n{green_print("Target")}: {pd.DataFrame(self.target).T}, "
+                    f"\n{red_print("Loss")}: {self.loss}")
                 print(
-                    f"\n\t{cyan_print("Gradient wrt Outputs")}: (d-{red_print("Loss")} / d-{yellow_print("Output")}): \n\n\t\t{pd.DataFrame(dloss_dY).T}\n\n\tFormula: (2 * ({yellow_print("Output")} - {green_print("Target")}))")
+                    f"\n\t{cyan_print("Gradient wrt Outputs")}: (d-{red_print("Loss")} / d-{yellow_print("Output")}): \n\n\t\t{pd.DataFrame(dloss_dY).T}"
+                    f"\n\n\tFormula: (2 * ({yellow_print("Output")} - {green_print("Target")}))")
                 print(
-                    f"\n\t{magenta_print("Gradient wrt Weights")}: (d-({cyan_print("Gradient wrt Outputs")}) / d-{blue_print("X")}): \n{pd.DataFrame(dloss_dW1)}\n\n\tFormula: (OuterProduct ({cyan_print("Gradient wrt Outputs")}) x {blue_print("X")})")
+                    f"\n\n\t{magenta_print("Gradient wrt Weights")}: (d-({cyan_print("Gradient wrt Outputs")}) / d-{blue_print("X")}): \n{pd.DataFrame(dloss_dW1)}"
+                    f"\n\n\tFormula: (OuterProduct ({cyan_print("Gradient wrt Outputs")}) x {blue_print("X")})")
+                print(f"Now we just subtract this ^^^ matrix (* learning_rate={learning_rate}) from our previous W1")
                 print(
                     f"------------------------------------------------------------------------------------------------")
 
