@@ -13,6 +13,10 @@ build networks that learn from data.
 
 
 
+\
+\
+\
+\
 
 ![NN_Basics](BetterGradientExample.png)
 This program (BetterGradient) takes things several steps further by using activation functions,
@@ -24,6 +28,27 @@ to dynamically update the weights of a Neural Network, that it may learn from it
 The plotting for this program is being improved. It is a more complex system than the first, 
 so I have been working out the kinks in the graphing to best highlight what I feel are the most
 important factors. 
+
+
+\
+\
+\
+\
+\
+The file SoftMaxDerivative.py does some exploration into the SoftMax function
+used in BetterGradient.py (and many other NNs!) and its odd derivative that vanishes
+when taking the partial derivative of the loss function with respect to the computed output of the NN
+when using Cross Entropy Loss as the loss fn. Have fun!
+
+
+
+\
+\
+\
+\
+\
+\
+\
 
 
 
