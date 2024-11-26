@@ -1,140 +1,127 @@
+
 import numpy as np
 from sklearn.preprocessing import Normalizer
 import pandas as pd
 
 
 def softmax(Z, axis=0):
-    # Subtract max for numerical stability
-    Z_shifted = Z - np.max(Z, axis=axis, keepdims=True)
+    """Softmax function, applied along a specified axis."""
+    Z_shifted = Z - np.max(Z, axis=axis, keepdims=True)  # Subtract max for numerical stability
     exp_Z = np.exp(Z_shifted)
     return exp_Z / np.sum(exp_Z, axis=axis, keepdims=True)
 
 
+def ReLU(Z):
+    """ReLU activation function."""
+    return np.maximum(0, Z)
+
+
 class AttentionGradient:
     def __init__(self, x_size, num_x):
-        self.z2 = None
-        self.a1 = None
-        self.normNX_2 = None
-        self.z1 = None
-        self.normNX = None
-        self.NX_X = None
-        self.X = []
-        for _ in range(num_x):
-            x = np.random.uniform(-100, 100, size=x_size)
-            x = (x - x.mean()) / x.std()
-            self.X.append(x)
-        self.X = np.array(self.X).T
-
-        self.Q = np.random.randn(x_size // 2, x_size) * 0.01
-        self.K = np.random.randn(x_size // 2, x_size) * 0.01
-        self.QK = np.zeros((x_size // 2, x_size // 2))
-        self.SMQK = np.zeros((x_size // 2, x_size // 2))
-
-        self.V = np.random.randn(x_size // 2, x_size) * 0.01
-
-        self.NX = np.zeros((x_size, num_x))
-
-        self.FFN_W1 = np.random.randn(x_size, x_size) * 0.01
-
-        self.FFN_W2 = np.random.randn(x_size, x_size) * 0.01
-
-        self.EX = np.zeros((x_size, num_x))
-        self.ran = False
-
-        self.TargetMat = self.generate_target_matrix()
-
         self.Loss = None
+        self.X = self.initialize_inputs(x_size, num_x)  # Tokens as columns
+        self.Q = np.random.rand(x_size, x_size)
+        self.K = np.random.rand(x_size, x_size)
+        self.V = np.random.rand(num_x, x_size)
+        self.FFN_W1 = np.random.rand(x_size, x_size)
+        self.FFN_W2 = np.random.rand(x_size, x_size)
+        self.TargetMat = self.generate_target_matrix()  # Target probabilities for loss
+        self.EX = None  # Final enhanced X
+        self.ran = False  # Whether attention has been run yet
 
-        #################
-        # Gradient
-
-        self.dQ = self.dK = self.dV = self.dFFN_W1 = self.dFFN_W2 = None
+    @staticmethod
+    def initialize_inputs(x_size, num_x):
+        """Initialize input matrix with normalized random data."""
+        X = []
+        for _ in range(num_x):
+            x = np.random.uniform(-99999, 99999, size=x_size)
+            x = (x - x.mean()) / x.std()  # Normalize each input vector
+            X.append(x)
+        X = np.array(X).T
+        print(f"Initialized X (tokens as columns):\n{pd.DataFrame(X)}")
+        return X
 
     def generate_target_matrix(self):
-        """
-        Generate a probabilistic TargetMat based on X.
-        """
-        # Use a simple linear transformation of X
+        """Generate probabilistic TargetMat based on X."""
         W_target = np.random.randn(self.X.shape[0], self.X.shape[0]) * 0.01
-        target_raw = W_target @ self.X  # Shape: (x_size, num_x)
-
-        # Apply softmax across columns to ensure a probabilistic interpretation
-        target_normalized = softmax(target_raw, axis=0)
-
-        return target_normalized
+        target_raw = W_target @ self.X
+        return softmax(target_raw, axis=0)  # Column-wise softmax
 
     def attention(self, verbose=False):
-        def printLog(x):
+        """Run the forward pass of the attention block."""
+        def printLog(msg):
             if verbose:
-                print(x)
+                print(msg)
 
-        q, k = self.Q @ self.X, self.K @ self.X
-        printLog(f"\n---MatMul Q*X({q.shape}) and K*X({k.shape})")
-        self.QK = q @ k
-        # need to add masking here !
+        # Step 1: Compute QK and apply softmax
+        q, k = self.Q @ self.X, self.K @ self.X  # Q*X and K*X
+        printLog(f"{"*"*54}\nStep 1: Compute Q.K and apply SoftMax")
+        printLog(f"q=Q @ X: \n{pd.DataFrame(q)}")
+        printLog(f"\nk = K @ X:\n{pd.DataFrame(k)}")
+        QK = q.T @ k  # (num_x x num_x)
+        printLog(f"\nQK = q.T @ k:\n{pd.DataFrame(QK)}")
+        SMQK = softmax(QK.T).T  # Column-wise softmax over attention scores
+        printLog(f"Attention Pattern:\n\n{pd.DataFrame(SMQK)}")
+        printLog("*"*54)
 
-        printLog(f"\n---pre-SoftMax QK ({self.QK.shape})")
-        self.SMQK = softmax(self.QK.T).T
-        printLog(f"\tbecomes SMQK({self.SMQK.shape})")
+        # Step 2: Compute attention output and add residual connection
+        printLog(f"{"*" * 54}\nStep 2: Compute Attention output and add residual (X)")
+        NX = (SMQK @ self.V).T  # Shape: (x_size x num_x)
+        printLog(f"\nNX = [SMQK @ V].T:\n{pd.DataFrame(NX)}")
+        NX_X = NX + self.X  # Residual connection
+        printLog(f"\nNX_X = NX + X:\n{pd.DataFrame(NX_X)}")
+        printLog("*" * 54)
 
-        printLog(f"\n---MatMul SMQK({self.SMQK.shape}) with V({self.V.shape}) and then Transpose")
-        self.NX = (self.SMQK @ self.V).T
-        printLog(f"\tbecomes NX({self.NX.shape})")
-        printLog(f"\n---Now we add NX({self.NX.shape}) and X({self.X.shape})")
-        self.NX_X = self.NX + self.X
+        # Step 3: Normalize (column-wise) NX_X
+        printLog(f"{"*" * 54}\nStep 3: Normalize NX_X column/tokenwise")
+        normNX = Normalizer().fit_transform(NX_X.T).T  # Token-wise normalization
+        printLog(f"\nnormNX = Norm(NX_X.T).T:\n{pd.DataFrame(normNX)}")
+        printLog("*" * 54)
 
-        printLog(f"\n---pre-normalized NX_X({self.NX_X.shape})")
-        self.normNX = Normalizer().fit_transform(self.NX_X)
-        printLog(f"\t becomes NX({self.normNX.shape})")
+        # Step 4: Feed-forward network (FFN)
+        printLog(f"{"*" * 54}\nStep 4: Feed-Forward Neural Network (FFN)")
+        z1 = self.FFN_W1 @ normNX  # First layer: Linear transformation
+        printLog(f"\nz1 = FFN_W1 @ normNX:\n{pd.DataFrame(z1)}")
+        a1 = ReLU(z1)  # Apply ReLU column-wise
+        printLog(f"\na1 = ReLU(z1):\n{pd.DataFrame(a1)}")
 
-        printLog(f"\n---MatMul FFN_W1({self.FFN_W1.shape}) and normNX({self.normNX.shape})")
-        self.z1 = self.FFN_W1 @ self.normNX
 
-        printLog(f"\n---pre-SoftMax z1({self.z1.shape})")
-        self.a1 = softmax(self.z1.T).T
-        printLog(f"\tbecomes a1({self.a1.shape})")
+        z2 = self.FFN_W2 @ a1  # Second layer: Linear transformation
+        printLog(f"\nz2 = FFN_W2 @ a1:\n{pd.DataFrame(z2)}")
+        normNX_2 = normNX + z2  # Add residual connection
+        printLog(f"\nnormNX_2 = normNX + z2:\n{pd.DataFrame(normNX_2)}")
+        printLog("*" * 54)
 
-        printLog(f"\n---MatMul FFN_W2({self.FFN_W2.shape}) and a1({self.a1.shape})")
-        self.z2 = self.FFN_W2 @ self.a1
-
-        printLog(f"\n---adding normNX({self.normNX.shape}) and z2({self.z2.shape})")
-        self.normNX_2 = self.normNX + self.z2
-
-        printLog(f"\n---pre-normalized EX({self.normNX_2.shape})")
-        self.EX = Normalizer().fit_transform(self.normNX_2)
+        # Step 5: Final softmax (column-wise)
+        printLog(f"{"*" * 54}\nStep 5: Final SoftMax column/tokenwise")
+        self.EX = softmax(normNX_2, axis=0)  # Token-wise probabilities
         self.ran = True
-        printLog(f"\tbecomes EX({self.EX.shape})\n\n\nATTENTION DONE\n\n\n\n\n\n")
-
-        printLog(f"Input X:\n\n{pd.DataFrame(self.X)}")
-        printLog(
-            f"\nBecomes Enhanced X:\n\n{pd.DataFrame(self.EX)}\n\n"
-            f"****************************************************************************************")
+        printLog(f"\nEX = SoftMax(normNX_2):\n{pd.DataFrame(self.EX)}")
+        printLog("*" * 54)
 
     def calculate_loss(self):
+        """Calculate cross-entropy loss."""
         if not self.ran:
             self.attention()
 
-        # Normalize TargetMat for a proper probabilistic interpretation
-        norm_target_mat = softmax(self.TargetMat, axis=0)
-
-        # Add small epsilon to EX to avoid log(0)
         eps = 1e-12  # Small constant for numerical stability
-        safe_EX = np.clip(self.EX, eps, None)  # Ensure EX >= eps
-
-        # Compute cross-entropy loss
-        self.Loss = -np.sum(norm_target_mat * np.log(safe_EX)) / self.EX.size
-        
-    def backprop(self):
-        if self.Loss is None:
-            self.calculate_loss()
-        
+        safe_EX = np.clip(self.EX, eps, None)  # Avoid log(0)
+        self.Loss = -np.sum(self.TargetMat * np.log(safe_EX)) / self.EX.size
+        print(f"Cross-Entropy Loss: {self.Loss:.6f}")
 
 
 if __name__ == "__main__":
-    ag = AttentionGradient(10, 5)
+    # Parameters
+    x_size = 10  # Size of each input vector
+    num_x = 20   # Number of tokens (columns)
 
-    ag.attention(verbose=True)  # Enable detailed logging
-    ag.calculate_loss()
-    print(f"Target Matrix: \n{ag.TargetMat}")
-    print(f"\nCross-Entropy Loss: {ag.Loss:.6f}")
+    # Instantiate and run
+    ag = AttentionGradient(x_size, num_x)
+    ag.attention(verbose=True)  # Forward pass with detailed logs
+    ag.calculate_loss()         # Calculate loss
 
+    # Display results
+    print(f"Target Matrix: \n{pd.DataFrame(ag.TargetMat)}")
+    print(f"Enhanced X (EX): \n{pd.DataFrame(ag.EX)}")
+
+    print(f"Loss: {ag.Loss}")

@@ -290,6 +290,6 @@ class BetterGradient:
 
 if __name__ == "__main__":
     bg = BetterGradient()
-    bg.gradient_descent(iterations=2927, insert_data="NN_data.csv")
+    bg.gradient_descent(iterations=2927)
 
 
