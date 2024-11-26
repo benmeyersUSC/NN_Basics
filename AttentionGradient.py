@@ -47,6 +47,14 @@ class AttentionGradient:
         target_raw = W_target @ self.X
         return softmax(target_raw, axis=0)  # Column-wise softmax
 
+    @staticmethod
+    def mask(matrix: np.ndarray):
+        # Create a lower-triangular mask (1s below the diagonal, 0s elsewhere)
+        mask = np.triu(np.ones(matrix.shape), k=0)
+        # Apply the mask by replacing 0s with -inf
+        return np.where(mask == 0, float('-inf'), matrix)
+
+
     def attention(self, verbose=False):
         """Run the forward pass of the attention block."""
         def printLog(msg):
@@ -60,6 +68,8 @@ class AttentionGradient:
         printLog(f"\nk = K @ X:\n{pd.DataFrame(k)}")
         QK = q.T @ k  # (num_x x num_x)
         printLog(f"\nQK = q.T @ k:\n{pd.DataFrame(QK)}")
+        QK = self.mask(QK)
+        printLog(f"\nMASKED***QK = MASK[QK]:\n{pd.DataFrame(QK)}")
         SMQK = softmax(QK.T).T  # Column-wise softmax over attention scores
         printLog(f"Attention Pattern:\n\n{pd.DataFrame(SMQK)}")
         printLog("*"*54)
@@ -113,7 +123,7 @@ class AttentionGradient:
 if __name__ == "__main__":
     # Parameters
     x_size = 10  # Size of each input vector
-    num_x = 20   # Number of tokens (columns)
+    num_x = 5   # Number of tokens (columns)
 
     # Instantiate and run
     ag = AttentionGradient(x_size, num_x)
